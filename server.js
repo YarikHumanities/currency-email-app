@@ -5,9 +5,19 @@ const bodyParser = require("body-parser");
 const axios = require("axios");
 const { google } = require("googleapis");
 const cron = require("node-cron");
+const sqlite3 = require("sqlite3").verbose();
 
 const app = express();
 const port = 3000;
+
+const db = new sqlite3.Database(":memory:"); // Use in-memory SQLite database
+
+// Create emails table in SQLite database
+db.serialize(() => {
+  db.run(
+    "CREATE TABLE IF NOT EXISTS emails (id INTEGER PRIMARY KEY AUTOINCREMENT, toEmail TEXT)"
+  );
+});
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -73,18 +83,43 @@ const sendEmail = async (toEmail, subject, message) => {
 };
 
 app.post("/send-email", async (req, res) => {
-  const { toEmail, subject, message } = req.body;
-  const result = await sendEmail(toEmail, subject, message);
-
-  if (result.success) {
-    res.status(200).send(`Email sent! Message ID: ${result.messageId}`);
-  } else {
-    res.status(500).send(`Error sending email: ${result.error}`);
-  }
+  const { toEmail } = req.body;
+  db.run("INSERT INTO emails (toEmail) VALUES (?)", [toEmail], (err) => {
+    if (err) {
+      console.error("Error inserting email into database:", err);
+      res.status(500).send("Error inserting email into database");
+    } else {
+      res.status(200).send("Email request added to queue");
+    }
+  });
 });
 
-cron.schedule("0 0 * * *", async () => {
-  await sendEmail("nadya.matsapura@gmail.com", "Schedule Sub", "Schedule Mess");
+// Define route to return all data from the 'emails' table
+app.get("/emails", (req, res) => {
+  db.all("SELECT * FROM emails", (err, rows) => {
+    if (err) {
+      console.error(err.message);
+      res.status(500).json({ error: "Internal server error" });
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+cron.schedule("* * * * *", async () => {
+  let response = null;
+  let message = null;
+  try {
+    response = await axios.get(
+      "https://api.exchangerate-api.com/v4/latest/USD"
+    );
+    let rate = response.data.rates.UAH;
+    message = rate;
+  } catch (error) {
+    console.error(`Error fetching currency rate: ${error}`);
+    res.status(500).send("Error fetching currency rate");
+  }
+  await sendEmail("nadya.matsapura@gmail.com", "Schedule Sub", message);
 });
 
 app.listen(port, () => {
