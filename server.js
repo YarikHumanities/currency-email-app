@@ -48,8 +48,6 @@ oauth2Client.setCredentials({
   refresh_token: process.env.REFRESH_TOKEN,
 });
 
-let emailQueue = [];
-
 const sendEmail = async (toEmail, subject, message) => {
   try {
     const accessToken = await oauth2Client.getAccessToken();
@@ -114,12 +112,26 @@ cron.schedule("* * * * *", async () => {
       "https://api.exchangerate-api.com/v4/latest/USD"
     );
     let rate = response.data.rates.UAH;
-    message = rate;
+    message = rate.toString();
   } catch (error) {
     console.error(`Error fetching currency rate: ${error}`);
     res.status(500).send("Error fetching currency rate");
   }
-  await sendEmail("nadya.matsapura@gmail.com", "Schedule Sub", message);
+
+  // Retrieve email addresses from the database
+  db.all("SELECT toEmail FROM emails", async (err, rows) => {
+    if (err) {
+      console.error(`Error fetching email addresses from database: ${err}`);
+      return;
+    }
+    // Loop through the rows and send email to each recipient
+    for (const row of rows) {
+      const toEmail = row.toEmail;
+      await sendEmail(toEmail, "Schedule Sub from DB", message);
+    }
+  });
+
+  //   await sendEmail("nadya.matsapura@gmail.com", "Schedule Sub", message);
 });
 
 app.listen(port, () => {
