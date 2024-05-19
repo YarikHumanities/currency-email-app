@@ -4,6 +4,7 @@ const nodemailer = require("nodemailer");
 const bodyParser = require("body-parser");
 const axios = require("axios");
 const { google } = require("googleapis");
+const cron = require("node-cron");
 
 const app = express();
 const port = 3000;
@@ -36,6 +37,8 @@ const oauth2Client = new OAuth2(
 oauth2Client.setCredentials({
   refresh_token: process.env.REFRESH_TOKEN,
 });
+
+let emailQueue = [];
 
 const sendEmail = async (toEmail, subject, message) => {
   try {
@@ -78,6 +81,10 @@ app.post("/send-email", async (req, res) => {
   } else {
     res.status(500).send(`Error sending email: ${result.error}`);
   }
+});
+
+cron.schedule("0 0 * * *", async () => {
+  await sendEmail("nadya.matsapura@gmail.com", "Schedule Sub", "Schedule Mess");
 });
 
 app.listen(port, () => {
