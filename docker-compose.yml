@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      - REDIRECT_URI=${REDIRECT_URI}
+      - REFRESH_TOKEN=${REFRESH_TOKEN}
+      - USER_EMAIL=${USER_EMAIL}
+    volumes:
+      - ./:/app

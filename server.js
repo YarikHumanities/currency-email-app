@@ -10,9 +10,10 @@ const sqlite3 = require("sqlite3").verbose();
 const app = express();
 const port = 3000;
 
-const db = new sqlite3.Database(":memory:"); // Use in-memory SQLite database
+//in-memory db init
+const db = new sqlite3.Database(":memory:");
 
-// Create emails table in SQLite database
+//table in memory db creation
 db.serialize(() => {
   db.run(
     "CREATE TABLE IF NOT EXISTS emails (id INTEGER PRIMARY KEY AUTOINCREMENT, toEmail TEXT)"
@@ -22,8 +23,8 @@ db.serialize(() => {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Endpoint to get currency rate
-app.get("/currency-rate", async (req, res) => {
+//endpoint to get current rate
+app.get("/rate", async (req, res) => {
   try {
     const response = await axios.get(
       "https://api.exchangerate-api.com/v4/latest/USD"
@@ -36,6 +37,7 @@ app.get("/currency-rate", async (req, res) => {
   }
 });
 
+//OAuth 2.0 creds and config to send emails
 const OAuth2 = google.auth.OAuth2;
 
 const oauth2Client = new OAuth2(
@@ -48,6 +50,7 @@ oauth2Client.setCredentials({
   refresh_token: process.env.REFRESH_TOKEN,
 });
 
+//send email method
 const sendEmail = async (toEmail, subject, message) => {
   try {
     const accessToken = await oauth2Client.getAccessToken();
@@ -80,9 +83,10 @@ const sendEmail = async (toEmail, subject, message) => {
   }
 };
 
-app.post("/send-email", async (req, res) => {
-  const { toEmail } = req.body;
-  db.run("INSERT INTO emails (toEmail) VALUES (?)", [toEmail], (err) => {
+//Endpoint to subscribe email
+app.post("/subscribe", async (req, res) => {
+  const { email } = req.body;
+  db.run("INSERT INTO emails (toEmail) VALUES (?)", [email], (err) => {
     if (err) {
       console.error("Error inserting email into database:", err);
       res.status(500).send("Error inserting email into database");
@@ -92,19 +96,8 @@ app.post("/send-email", async (req, res) => {
   });
 });
 
-// Define route to return all data from the 'emails' table
-app.get("/emails", (req, res) => {
-  db.all("SELECT * FROM emails", (err, rows) => {
-    if (err) {
-      console.error(err.message);
-      res.status(500).json({ error: "Internal server error" });
-      return;
-    }
-    res.json(rows);
-  });
-});
-
-cron.schedule("* * * * *", async () => {
+//Scheduled event once per day
+cron.schedule("0 0 * * *", async () => {
   let response = null;
   let message = null;
   try {
@@ -118,20 +111,18 @@ cron.schedule("* * * * *", async () => {
     res.status(500).send("Error fetching currency rate");
   }
 
-  // Retrieve email addresses from the database
+  // Loop through all emails and send them message
   db.all("SELECT toEmail FROM emails", async (err, rows) => {
     if (err) {
       console.error(`Error fetching email addresses from database: ${err}`);
       return;
     }
-    // Loop through the rows and send email to each recipient
+
     for (const row of rows) {
       const toEmail = row.toEmail;
-      await sendEmail(toEmail, "Schedule Sub from DB", message);
+      await sendEmail(toEmail, "Schedule Sub from", message);
     }
   });
-
-  //   await sendEmail("nadya.matsapura@gmail.com", "Schedule Sub", message);
 });
 
 app.listen(port, () => {
